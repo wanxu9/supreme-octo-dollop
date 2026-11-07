@@ -98,25 +98,21 @@
     });
   }
 
-  // 加载中国省级地图
-  fetch('https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json')
-    .then(res => {
-      if (!res.ok) throw new Error('china ' + res.status);
-      return res.json();
-    })
-    .then(china => {
-      echarts.registerMap('china', china);
-      regionOptions = china.features.map(f => ({
-        name: f.properties.name,
-        itemStyle: { areaColor: terrainColor(f.properties.name) }
-      }));
-      chinaGeoLoaded = true;
-      renderMap(currentYear);
-    })
-    .catch(err => {
-      console.error(err);
-      mapEl.innerHTML = '<div class="map-error">地图数据加载失败，请检查网络后刷新重试</div>';
-    });
+  // 使用本地打包的中国省级地图数据（不再依赖外部接口）
+  Promise.resolve().then(() => {
+    const china = window.CHINA_GEO;
+    if (!china || !china.features) throw new Error('china geo data missing');
+    echarts.registerMap('china', china);
+    regionOptions = china.features.map(f => ({
+      name: f.properties.name,
+      itemStyle: { areaColor: terrainColor(f.properties.name) }
+    }));
+    chinaGeoLoaded = true;
+    renderMap(currentYear);
+  }).catch(err => {
+    console.error(err);
+    mapEl.innerHTML = '<div class="map-error">地图数据加载失败，请检查网络后刷新重试</div>';
+  });
 
   // ------- 时间轴 -------
   let currentYear = YEARS[0];
