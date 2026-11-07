@@ -1,0 +1,8 @@
+# 参考资料（图片、文献），不部署上线
+图片资料/
+文献资料/
+
+# 系统文件
+Thumbs.db
+Desktop.ini
+.DS_Store

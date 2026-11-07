@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>马克思主义在中国的传播简史</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <h1 class="title">马克思主义在中国的传播</h1>
+    <p class="subtitle">1915 — 1921 · 传播简史</p>
+    <p class="hint">拖动上方时间轴切换年份 · 点击地图上的城市标记查看事件</p>
+  </header>
+
+  <section class="timeline-wrap">
+    <div class="timeline">
+      <div class="timeline-track" id="timelineTrack">
+        <div class="timeline-fill" id="timelineFill"></div>
+        <div class="timeline-thumb" id="timelineThumb"></div>
+      </div>
+      <div class="timeline-years" id="timelineYears"></div>
+    </div>
+  </section>
+
+  <main class="main">
+    <aside class="people-panel" id="peoplePanel">
+      <h2 class="panel-title">人物</h2>
+      <ul class="people-list" id="peopleList"></ul>
+      <p class="panel-hint">人物简介后续补充</p>
+    </aside>
+
+    <section class="map-panel">
+      <div class="map" id="map"></div>
+      <div class="info-panel" id="infoPanel">
+        <h2 class="info-year" id="infoYear">1915</h2>
+        <ul class="info-events" id="infoEvents"></ul>
+      </div>
+    </section>
+  </main>
+
+  <button class="panel-toggle" id="panelToggle">人物</button>
+
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/dist/echarts-gl.min.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
