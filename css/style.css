@@ -504,11 +504,11 @@ kbd {
 
 .list-item {
   display: grid;
-  grid-template-columns: 160px minmax(0, 1fr) auto;
+  grid-template-columns: 20px 158px minmax(0, 1fr) auto;
   align-items: center;
   gap: 14px;
   width: 100%;
-  padding: 11px 10px;
+  padding: 11px 10px 11px 0;
   font-family: inherit;
   font-size: 14px;
   color: var(--ink);
@@ -522,6 +522,33 @@ kbd {
 
 .list-item:hover { background: #faf5e9; }
 .list-item.active { background: #f9eee8; box-shadow: inset 3px 0 0 var(--red); }
+
+.li-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  justify-self: center;
+  box-shadow: 0 0 0 3px var(--card);
+  position: relative;
+  z-index: 1;
+}
+
+.chrono { position: relative; }
+.chrono::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 18px;
+  bottom: 18px;
+  width: 1px;
+  background: var(--line);
+}
+
+.list-item.flash { animation: flashBg 1.6s ease; }
+@keyframes flashBg {
+  0% { background: #f6ddcf; }
+  100% { background: transparent; }
+}
 
 .li-date { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .li-title { line-height: 1.6; }
@@ -603,13 +630,80 @@ kbd {
 .site-footer p { margin: 0; }
 .foot-note { font-size: 11.5px; opacity: .8; }
 
+
+/* ---------------- 地图工具条 ---------------- */
+.map-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.map-btn {
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+}
+
+.map-btn:hover { background: var(--paper-2); border-color: #cdbfa6; color: var(--red); }
+
+/* ---------------- 人物：相关节点 ---------------- */
+.person-events {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+
+.pev-label {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: .06em;
+  margin-right: 2px;
+}
+
+.pev {
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--ink);
+  background: #faf5e9;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 9px;
+  cursor: pointer;
+  transition: background .14s, border-color .14s, color .14s;
+}
+
+.pev:hover {
+  background: #fff;
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.sec-sub {
+  margin-left: 10px;
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: .02em;
+}
 /* ---------------- 响应式 ---------------- */
 @media (max-width: 920px) {
   .board { grid-template-columns: 1fr; }
   .card-panel { position: static; }
   #map { height: 330px; }
   .intro-grid { grid-template-columns: 1fr; }
-  .list-item { grid-template-columns: 1fr auto; }
+  .list-item { grid-template-columns: 18px minmax(0, 1fr) auto; }
   .li-date { display: none; }
   .hero { padding-top: 38px; }
   .lede { font-size: 14.5px; text-align: left; }

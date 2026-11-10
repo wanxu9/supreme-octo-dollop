@@ -31,7 +31,11 @@
     <section class="map-panel" aria-label="传播地图">
       <div class="panel-head">
         <h2>传播地图</h2>
-        <span class="panel-hint">点击地图上的城市，跳到该地的事件</span>
+        <div class="map-tools">
+          <span class="panel-hint">拖动平移 · 滚轮 / 双指缩放 · 点城市跳转</span>
+          <button class="map-btn" id="mapFocus" type="button">定位当前</button>
+          <button class="map-btn" id="mapReset" type="button">复位</button>
+        </div>
       </div>
       <canvas id="map"></canvas>
       <div class="legend">
@@ -86,7 +90,7 @@
   </section>
 
   <section class="list-sec" aria-label="全部节点">
-    <h2 class="sec-title">全部节点</h2>
+    <h2 class="sec-title">全部节点<span class="sec-sub">按时间顺序，共 23 个</span></h2>
     <div id="list"></div>
   </section>
 

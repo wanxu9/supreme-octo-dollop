@@ -1,15 +1,19 @@
 /* ============================================================
-   传播地图：用本地 GeoJSON 直接画在中国地图上
-   不依赖 ECharts / WebGL / CDN，离线可用
+   传播地图：本地 GeoJSON + Canvas 绘制
+   支持拖动平移、滚轮/双指缩放、点击城市跳转
    ============================================================ */
 
 const MapView = (function () {
   const BOUNDS = { lon0: 73, lon1: 141, lat0: 17, lat1: 54 };
   const PAD = 10;
+  const MIN_ZOOM = 1, MAX_ZOOM = 4.5;
 
   let canvas, ctx, dpr = 1;
-  let W = 0, H = 0, boxW = 1, boxH = 1, offX = 0, offY = 0;
-  let base = null;
+  let W = 0, H = 0;
+  let base = null;                       // 底图（省份）离屏画布
+  const BASE = { w: 0, h: 0, ox: 0, oy: 0 };
+  let zoom = 1, panX = 0, panY = 0;
+
   let geo = null;
   let cityPoints = {};
   let view = { index: 0, events: [] };
@@ -23,13 +27,19 @@ const MapView = (function () {
     const r = (lat * Math.PI) / 180;
     return Math.log(Math.tan(Math.PI / 4 + r / 2));
   }
-  function project(lng, lat) {
+  // 底图坐标（0..BASE.w / 0..BASE.h）
+  function basePoint(lng, lat) {
     const x = (lng - BOUNDS.lon0) / (BOUNDS.lon1 - BOUNDS.lon0);
-    const yTop = mercY(BOUNDS.lat1), yBot = mercY(BOUNDS.lat0);
-    const y = (yTop - mercY(lat)) / (yTop - yBot);
-    return { x: offX + x * boxW, y: offY + y * boxH };
+    const y = (mercY(BOUNDS.lat1) - mercY(lat)) / (mercY(BOUNDS.lat1) - mercY(BOUNDS.lat0));
+    return { x: x * BASE.w, y: y * BASE.h };
+  }
+  // 屏幕坐标
+  function project(lng, lat) {
+    const p = basePoint(lng, lat);
+    return { x: panX + p.x * zoom, y: panY + p.y * zoom };
   }
 
+  /* ---------- 尺寸 ---------- */
   function layout() {
     const w = canvas.clientWidth || 640;
     const h = canvas.clientHeight || 480;
@@ -38,41 +48,37 @@ const MapView = (function () {
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    // 保持经纬度比例（墨卡托）
+
     const lonDeg = BOUNDS.lon1 - BOUNDS.lon0;
     const latMercDeg = (mercY(BOUNDS.lat1) - mercY(BOUNDS.lat0)) * 180 / Math.PI;
     const aspect = lonDeg / latMercDeg;
     let drawW = W - PAD * 2, drawH = H - PAD * 2;
     if (drawW / drawH > aspect) drawW = drawH * aspect;
     else drawH = drawW / aspect;
-    boxW = drawW;
-    boxH = drawH;
-    offX = (W - drawW) / 2;
-    offY = (H - drawH) / 2;
+
+    BASE.w = drawW; BASE.h = drawH;
+    BASE.ox = (W - drawW) / 2;
+    BASE.oy = (H - drawH) / 2;
+    if (zoom <= 1.001) { zoom = 1; panX = BASE.ox; panY = BASE.oy; }
+    clampPan();
   }
 
-  /* ---------- 省份底图 ---------- */
+  function clampPan() {
+    const cw = BASE.w * zoom, ch = BASE.h * zoom;
+    if (cw <= W) panX = (W - cw) / 2;
+    else panX = Math.min(0, Math.max(W - cw, panX));
+    if (ch <= H) panY = (H - ch) / 2;
+    else panY = Math.min(0, Math.max(H - ch, panY));
+  }
+
+  /* ---------- 底图 ---------- */
   function drawBase() {
     base = document.createElement('canvas');
-    base.width = canvas.width;
-    base.height = canvas.height;
+    base.width = Math.max(1, Math.round(BASE.w * dpr));
+    base.height = Math.max(1, Math.round(BASE.h * dpr));
     const g = base.getContext('2d');
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    g.fillStyle = '#e4ecec';
-    g.fillRect(0, 0, W, H);
-
-    // 经纬网
-    g.strokeStyle = 'rgba(120,140,140,0.16)';
-    g.lineWidth = 0.6;
-    for (let lon = 75; lon <= 140; lon += 5) {
-      const a = project(lon, BOUNDS.lat0), b = project(lon, BOUNDS.lat1);
-      g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
-    }
-    for (let lat = 20; lat <= 50; lat += 5) {
-      const a = project(BOUNDS.lon0, lat), b = project(BOUNDS.lon1, lat);
-      g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
-    }
+    g.clearRect(0, 0, BASE.w, BASE.h);
 
     geo.features.forEach(f => {
       const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
@@ -80,7 +86,7 @@ const MapView = (function () {
       polys.forEach(rings => {
         rings.forEach(ring => {
           ring.forEach((pt, i) => {
-            const p = project(pt[0], pt[1]);
+            const p = basePoint(pt[0], pt[1]);
             if (i === 0) g.moveTo(p.x, p.y); else g.lineTo(p.x, p.y);
           });
           g.closePath();
@@ -88,13 +94,13 @@ const MapView = (function () {
       });
       g.fillStyle = '#ece2cc';
       g.fill('evenodd');
-      g.strokeStyle = 'rgba(150,132,104,0.55)';
+      g.strokeStyle = 'rgba(150,132,104,0.6)';
       g.lineWidth = 0.7;
       g.stroke();
     });
   }
 
-  /* ---------- 高亮当前省份 ---------- */
+  /* ---------- 高亮省份 ---------- */
   function drawProvince(name, color) {
     if (!name) return;
     const f = geo.features.find(x => x.properties.name === name);
@@ -112,12 +118,12 @@ const MapView = (function () {
     });
     ctx.fillStyle = color;
     ctx.fill('evenodd');
-    ctx.strokeStyle = 'rgba(168,50,42,0.55)';
+    ctx.strokeStyle = 'rgba(168,50,42,0.5)';
     ctx.lineWidth = 1;
     ctx.stroke();
   }
 
-  /* ---------- 城市点 ---------- */
+  /* ---------- 城市与路线 ---------- */
   function collectCities() {
     cityPoints = {};
     view.events.forEach((ev, i) => {
@@ -129,15 +135,13 @@ const MapView = (function () {
   }
 
   function cityState(cityId) {
-    const idx = view.index;
     const info = cityPoints[cityId];
-    const hasNow = view.events[idx] && view.events[idx].city === cityId;
+    const hasNow = view.events[view.index] && view.events[view.index].city === cityId;
     if (hasNow) return 'now';
-    if (info && info.last < idx) return 'done';
+    if (info && info.last < view.index) return 'done';
     return 'idle';
   }
 
-  /* ---------- 路线 ---------- */
   function routeCities() {
     const order = [];
     let last = null;
@@ -158,39 +162,21 @@ const MapView = (function () {
     ctx.setLineDash([5, 6]);
     ctx.lineDashOffset = reduced ? 0 : -time * 0.02;
     for (let i = 1; i < order.length; i++) {
-      const a = CITIES[order[i - 1]], b = CITIES[order[i]];
       if (!shown.has(order[i])) continue;
+      const a = CITIES[order[i - 1]], b = CITIES[order[i]];
       const p1 = project(a.lng, a.lat), p2 = project(b.lng, b.lat);
       ctx.strokeStyle = 'rgba(168,50,42,0.32)';
       ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
     }
     ctx.restore();
-
-    // 十月革命：域外 → 北京
-    const pet = CITIES.pet;
-    const bj = CITIES.bj;
-    if (view.index >= 3) {
-      const p1 = offmapPoint(), p2 = project(bj.lng, bj.lat);
-      ctx.save();
-      ctx.setLineDash([3, 5]);
-      ctx.strokeStyle = 'rgba(47,93,124,0.45)';
-      ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
-      ctx.restore();
-    }
   }
 
   function offmapPoint() {
-    return { x: offX + 46, y: offY + 26 };
-  }
-
-  /* ---------- 标记 ---------- */
-  function markerRadius(state) {
-    return state === 'now' ? 7 : state === 'done' ? 4.5 : 3.5;
+    return { x: panX + 46, y: panY + 26 };
   }
 
   function drawMarker(p, state, time) {
-    const r = markerRadius(state);
+    const r = state === 'now' ? 7 : state === 'done' ? 4.5 : 3.5;
     if (state === 'now' && !reduced) {
       const pulse = (Math.sin(time / 420) + 1) / 2;
       ctx.beginPath();
@@ -223,11 +209,28 @@ const MapView = (function () {
     ctx.fillText(text, p.x, y - 1);
   }
 
-  /* ---------- 主绘制 ---------- */
+  /* ---------- 绘制 ---------- */
   function draw(time) {
     if (!base) return;
     ctx.clearRect(0, 0, W, H);
-    ctx.drawImage(base, 0, 0, W, H);
+    ctx.fillStyle = '#e4ecec';
+    ctx.fillRect(0, 0, W, H);
+
+    // 经纬网
+    ctx.strokeStyle = 'rgba(120,140,140,0.14)';
+    ctx.lineWidth = 0.6;
+    for (let lon = 75; lon <= 140; lon += 5) {
+      const a = project(lon, BOUNDS.lat0), b = project(lon, BOUNDS.lat1);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+    for (let lat = 20; lat <= 50; lat += 5) {
+      const a = project(BOUNDS.lon0, lat), b = project(BOUNDS.lon1, lat);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+
+    if (base.width > 1) {
+      ctx.drawImage(base, panX, panY, BASE.w * zoom, BASE.h * zoom);
+    }
 
     const ev = view.events[view.index];
     if (ev && CITIES[ev.city] && !CITIES[ev.city].offmap) {
@@ -236,9 +239,15 @@ const MapView = (function () {
 
     drawRoute(time);
 
-    // 域外点
     if (view.index >= 3) {
       const p = offmapPoint();
+      const bj = project(CITIES.bj.lng, CITIES.bj.lat);
+      ctx.save();
+      ctx.setLineDash([3, 5]);
+      ctx.strokeStyle = 'rgba(47,93,124,0.45)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(bj.x, bj.y); ctx.stroke();
+      ctx.restore();
       ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
       ctx.fillStyle = '#2f5d7c'; ctx.fill();
       ctx.font = '12px "PingFang SC","Microsoft YaHei",sans-serif';
@@ -257,18 +266,18 @@ const MapView = (function () {
       else {
         ctx.font = '11px "PingFang SC","Microsoft YaHei",sans-serif';
         ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
         ctx.fillStyle = 'rgba(90,82,70,0.38)';
         ctx.fillText(info.city.name, p.x, p.y - 11);
       }
     });
 
-    // 当前事件若在域外，给个提示
     const cur = view.events[view.index];
     if (cur && CITIES[cur.city] && CITIES[cur.city].offmap) {
       ctx.font = '12px "PingFang SC","Microsoft YaHei",sans-serif';
       ctx.fillStyle = 'rgba(47,93,124,0.9)';
       ctx.textAlign = 'left';
-      ctx.fillText('十月革命的消息经西伯利亚铁路传入中国', offX + 18, offY + 34);
+      ctx.fillText('十月革命的消息经西伯利亚铁路传入中国', panX + 18, panY + 40);
     }
   }
 
@@ -285,7 +294,7 @@ const MapView = (function () {
   }
 
   function pick(x, y) {
-    let best = null, bestD = 16;
+    let best = null, bestD = 18;
     Object.keys(cityPoints).forEach(id => {
       const c = cityPoints[id].city;
       const p = project(c.lng, c.lat);
@@ -295,24 +304,87 @@ const MapView = (function () {
     return best;
   }
 
+  function setZoom(nz, cx, cy) {
+    nz = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, nz));
+    if (Math.abs(nz - zoom) < 0.001) return;
+    const f = nz / zoom;
+    panX = cx - (cx - panX) * f;
+    panY = cy - (cy - panY) * f;
+    zoom = nz;
+    clampPan();
+  }
+
   function bind() {
+    const pointers = new Map();
+    let drag = null;
+    let pinch = null;
+
+    canvas.addEventListener('pointerdown', e => {
+      pointers.set(e.pointerId, pointerPos(e));
+      if (pointers.size === 1) {
+        const p = pointerPos(e);
+        drag = { x: p.x, y: p.y, px: panX, py: panY, moved: false };
+        if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
+      } else if (pointers.size === 2) {
+        const list = [...pointers.values()];
+        pinch = { d: Math.hypot(list[0].x - list[1].x, list[0].y - list[1].y), zoom: zoom };
+        drag = null;
+      }
+    });
+
     canvas.addEventListener('pointermove', e => {
+      if (pointers.has(e.pointerId)) pointers.set(e.pointerId, pointerPos(e));
       const p = pointerPos(e);
+
+      if (pointers.size === 2 && pinch) {
+        const list = [...pointers.values()];
+        const d = Math.hypot(list[0].x - list[1].x, list[0].y - list[1].y);
+        const mid = { x: (list[0].x + list[1].x) / 2, y: (list[0].y + list[1].y) / 2 };
+        if (pinch.d > 10) setZoom(pinch.zoom * (d / pinch.d), mid.x, mid.y);
+        return;
+      }
+      if (drag) {
+        const dx = p.x - drag.x, dy = p.y - drag.y;
+        if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
+        panX = drag.px + dx;
+        panY = drag.py + dy;
+        clampPan();
+        canvas.style.cursor = 'grabbing';
+        return;
+      }
       const id = pick(p.x, p.y);
-      canvas.style.cursor = id ? 'pointer' : 'default';
-      if (id !== hoverCity) { hoverCity = id; }
+      canvas.style.cursor = id ? 'pointer' : 'grab';
+      hoverCity = id;
     });
+
+    function endPointer(e) {
+      if (drag && !drag.moved) {
+        const p = pointerPos(e);
+        const id = pick(p.x, p.y);
+        if (id && onPick) onPick(id);
+      }
+      drag = null;
+      pointers.delete(e.pointerId);
+      if (pointers.size < 2) pinch = null;
+      canvas.style.cursor = 'grab';
+    }
+    canvas.addEventListener('pointerup', endPointer);
+    canvas.addEventListener('pointercancel', e => { drag = null; pointers.delete(e.pointerId); pinch = null; });
     canvas.addEventListener('pointerleave', () => { hoverCity = null; });
-    canvas.addEventListener('click', e => {
+
+    canvas.addEventListener('wheel', e => {
+      e.preventDefault();
       const p = pointerPos(e);
-      const id = pick(p.x, p.y);
-      if (id && onPick) onPick(id);
-    });
+      const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+      setZoom(zoom * factor, p.x, p.y);
+    }, { passive: false });
   }
 
   function resize() {
+    const oldZoom = zoom, oldPanX = panX, oldPanY = panY;
     layout();
     drawBase();
+    if (oldZoom > 1) { zoom = oldZoom; panX = oldPanX; panY = oldPanY; clampPan(); }
     draw(0);
   }
 
@@ -330,6 +402,7 @@ const MapView = (function () {
       collectCities();
       bind();
       window.addEventListener('resize', resize);
+      canvas.style.cursor = 'grab';
       loop(0);
       return true;
     },
@@ -338,10 +411,27 @@ const MapView = (function () {
       collectCities();
       draw(performance.now());
     },
-    destroy() {
-      if (raf) cancelAnimationFrame(raf);
-      window.removeEventListener('resize', resize);
-    }
+    reset() {
+      zoom = 1;
+      panX = BASE.ox;
+      panY = BASE.oy;
+      clampPan();
+      draw(performance.now());
+    },
+    focus() {
+      const ev = view.events[view.index];
+      if (!ev) return;
+      const c = CITIES[ev.city];
+      if (!c || c.offmap) { this.reset(); return; }
+      const nz = Math.max(zoom, 1.9);
+      const bp = basePoint(c.lng, c.lat);
+      zoom = nz;
+      panX = W / 2 - bp.x * nz;
+      panY = H / 2 - bp.y * nz;
+      clampPan();
+      draw(performance.now());
+    },
+    get zoomLevel() { return zoom; }
   };
 })();
 

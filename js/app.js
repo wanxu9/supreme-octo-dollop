@@ -117,47 +117,63 @@
     }
   }
 
-  /* ---------------- 渲染：事件清单 ---------------- */
+  /* ---------------- 渲染：事件清单（按时间顺序一条线） ---------------- */
   function buildList() {
     const wrap = $('list');
     wrap.innerHTML = '';
-    STAGES.forEach((st, si) => {
-      const sec = document.createElement('section');
-      sec.className = 'list-stage';
-      const head = document.createElement('div');
-      head.className = 'list-head';
-      head.innerHTML = '<span class="list-dot" style="background:' + st.color + '"></span>' +
-        '<h3>' + st.name + '</h3><span class="list-sub">' + st.from + '—' + st.to + ' · ' + st.sub + '</span>';
-      sec.append(head);
+    const ol = document.createElement('ol');
+    ol.className = 'list-items chrono';
 
-      const ol = document.createElement('ol');
-      ol.className = 'list-items';
-      events.forEach((ev, i) => {
-        if (ev.stage !== si) return;
-        const li = document.createElement('li');
-        const btn = document.createElement('button');
-        btn.className = 'list-item';
-        btn.dataset.i = i;
-        btn.innerHTML = '<span class="li-date">' + ev.date + '</span>' +
-          '<span class="li-title">' + ev.title + '</span>' +
-          '<span class="li-place">' + cityOf(ev).name + '</span>';
-        btn.addEventListener('click', () => {
-          setIndex(i, true);
-          const board = document.getElementById('board');
-          if (board && board.scrollIntoView) board.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
-        li.append(btn);
-        ol.append(li);
+    events.forEach((ev, i) => {
+      const st = stageOf(ev);
+      const li = document.createElement('li');
+      const btn = document.createElement('button');
+      btn.className = 'list-item';
+      btn.dataset.i = i;
+      btn.dataset.id = ev.id;
+
+      const dot = document.createElement('span');
+      dot.className = 'li-dot';
+      dot.style.background = st.color;
+
+      const date = document.createElement('span');
+      date.className = 'li-date';
+      date.textContent = ev.date;
+
+      const title = document.createElement('span');
+      title.className = 'li-title';
+      title.textContent = ev.title;
+
+      const place = document.createElement('span');
+      place.className = 'li-place';
+      place.textContent = cityOf(ev).name;
+
+      btn.append(dot, date, title, place);
+      btn.addEventListener('click', () => {
+        setIndex(i, true);
+        const board = document.getElementById('board');
+        if (board && board.scrollIntoView) board.scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
-      sec.append(ol);
-      wrap.append(sec);
+      li.append(btn);
+      ol.append(li);
     });
+
+    wrap.append(ol);
   }
 
   function updateListActive() {
     document.querySelectorAll('.list-item').forEach(b => {
       b.classList.toggle('active', Number(b.dataset.i) === index);
     });
+  }
+
+  function flash(id) {
+    const el = document.querySelector('.list-item[data-id="' + id + '"]');
+    if (!el) return;
+    el.classList.remove('flash');
+    void el.offsetWidth;
+    el.classList.add('flash');
+    setTimeout(() => el.classList.remove('flash'), 1600);
   }
 
   /* ---------------- 渲染：阶段切换 ---------------- */
@@ -186,11 +202,26 @@
   }
 
   /* ---------------- 渲染：人物与出处 ---------------- */
+  function shortDate(ev) {
+    const m = String(ev.date).match(/(\d{4})\s*年\s*(?:(\d{1,2})\s*月)?/);
+    if (!m) return ev.date;
+    return m[2] ? m[1] + '.' + m[2] : m[1];
+  }
+
+  function jumpTo(i) {
+    setIndex(i, true);
+    if (typeof MapView !== 'undefined') MapView.focus();
+    const board = document.getElementById('board');
+    if (board && board.scrollIntoView) board.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    flash(events[i].id);
+  }
+
   function buildPeople() {
     const wrap = $('peopleList');
     PEOPLE.forEach(p => {
       const card = document.createElement('article');
       card.className = 'person';
+
       const name = document.createElement('h3');
       name.textContent = p.name;
       if (p.years) {
@@ -206,6 +237,27 @@
       note.className = 'person-note';
       note.textContent = p.note;
       card.append(name, role, note);
+
+      if (p.events && p.events.length) {
+        const row = document.createElement('div');
+        row.className = 'person-events';
+        const label = document.createElement('span');
+        label.className = 'pev-label';
+        label.textContent = '相关节点';
+        row.append(label);
+        p.events.forEach(id => {
+          const i = events.findIndex(e => e.id === id);
+          if (i < 0) return;
+          const b = document.createElement('button');
+          b.className = 'pev';
+          b.textContent = shortDate(events[i]);
+          b.title = events[i].date + ' · ' + events[i].title;
+          b.addEventListener('click', () => jumpTo(i));
+          row.append(b);
+        });
+        card.append(row);
+      }
+
       wrap.append(card);
     });
   }
@@ -332,6 +384,10 @@
     $('prevBtn').addEventListener('click', () => setIndex(index - 1, true));
     $('nextBtn').addEventListener('click', () => setIndex(index + 1, true));
     $('playBtn').addEventListener('click', togglePlay);
+    const focusBtn = $('mapFocus');
+    const resetBtn = $('mapReset');
+    if (focusBtn) focusBtn.addEventListener('click', () => { if (typeof MapView !== 'undefined') MapView.focus(); });
+    if (resetBtn) resetBtn.addEventListener('click', () => { if (typeof MapView !== 'undefined') MapView.reset(); });
 
     let start = 0;
     if (location.hash) {
